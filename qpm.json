@@ -1,1 +1,29 @@
-
+{
+  "version": "0.1.0",
+  "sharedDir": "shared",
+  "dependenciesDir": "extern",
+  "info": {
+    "name": "my-cool-mod",
+    "id": "my-cool-mod",
+    "version": "0.1.0",
+    "url": null,
+    "additionalData": {
+      "overrideSoName": "libmy-cool-mod.so",
+      "cmake": true
+    }
+  },
+  "dependencies": [
+    {
+      "id": "beatsaber-hook",
+      "versionRange": "^3.14.0",
+      "additionalData": {}
+    },
+    {
+      "id": "scotland2",
+      "versionRange": "^0.1.4",
+      "additionalData": {
+        "private": true
+      }
+    }
+  ]
+}
