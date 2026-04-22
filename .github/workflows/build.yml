@@ -1,0 +1,117 @@
+name: Build QMOD
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  MOD_ID: my-cool-mod
+  MOD_VERSION: 0.1.0
+  NDK_VERSION: r25c
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Checkout ──
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ── Setup Tools ──
+      - name: Setup QPM (Rust)
+        uses: Fernthedev/qpm-action@main
+        with:
+          workflow_token: ${{ secrets.GITHUB_TOKEN }}
+          restore: true
+          cache: true
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+
+      - name: Setup CMake & Ninja
+        uses: lukka/get-cmake@latest
+
+      # ── Restore Dependencies ──
+      - name: QPM Restore
+        run: qpm restore
+
+      # ── Build .so ──
+      - name: Build mod
+        run: |
+          cd ${GITHUB_WORKSPACE}
+          qpm s build
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+
+      # ── Create QMOD ──
+      - name: Generate mod.json from template
+        run: |
+          sed "s/\${version}/${{ env.MOD_VERSION }}/g" \
+            mod.template.json > mod.json
+
+      - name: Package QMOD
+        run: |
+          # Create staging directory
+          mkdir -p qmod_staging
+
+          # Copy the compiled .so
+          cp ./build/lib${MOD_ID}.so qmod_staging/
+
+          # Copy mod.json
+          cp mod.json qmod_staging/
+
+          # Copy cover image if it exists
+          if [ -f "cover.png" ]; then
+            cp cover.png qmod_staging/
+          fi
+
+          # Copy any extra files (libs, file copies, etc.)
+          # cp libs/*.so qmod_staging/  # uncomment if needed
+
+          # Package into .qmod (it's just a zip)
+          cd qmod_staging
+          zip -r ../${{ env.MOD_ID }}_v${{ env.MOD_VERSION }}.qmod *
+
+      # ── Upload Artifact ──
+      - name: Upload QMOD artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.MOD_ID }}-qmod
+          path: ${{ env.MOD_ID }}_v${{ env.MOD_VERSION }}.qmod
+
+  # ── Release (only on tags) ──
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download QMOD artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.MOD_ID }}-qmod
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: "*.qmod"
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
